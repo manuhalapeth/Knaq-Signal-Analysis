@@ -5,23 +5,23 @@
 
 ## 1. The Sensor Geometry Is Accidentally Perfect for Dynamics Analysis
 
-The long-term gravity decomposition (derived from 52.66M samples, zero gyroscope) recovers **g = 9.792 m/s² against standard 9.807 m/s² — a 0.146% error**. That's calibration quality you'd expect from a lab instrument, not raw firmware output. It validates that the long-term mean approach is reliable and that the sensor has negligible bias.
+The long-term gravity decomposition (derived from 52.66M samples, zero gyroscope) recovers **g = 9.792 m/s² against standard 9.807 m/s², a 0.146% error**. That's calibration quality you'd expect from a lab instrument, not raw firmware output. It validates that the long-term mean approach is reliable and that the sensor has negligible bias.
 
 What it reveals about mounting: X carries 95.8% of gravitational load (mean 9.399 m/s², 16.30° from vertical), Y carries 28.0% (mean −2.748 m/s², 73.70° from vertical), and Z carries **0.7%** (mean 0.070 m/s², 89.59° from vertical — effectively perfectly horizontal). Pitch is +73.70°, roll +88.53°.
 
-The consequence for signal analysis is significant: **Z requires zero gravity compensation**. Its RMS = 2.756 m/s², std = 2.755 m/s² — 100% dynamic content by definition. X, by contrast, is 91.1% gravity and only 8.9% dynamics. For any real-time event classifier or anomaly detector, Z is the channel to watch — no DC removal, no tilt correction, no orientation model needed. Y sits in between at 32.1% dynamic content.
+The consequence for signal analysis is significant: **Z requires zero gravity compensation**. Its RMS = 2.756 m/s², std = 2.755 m/s², 100% dynamic content by definition. X, by contrast, is 91.1% gravity and only 8.9% dynamics. For any real-time event classifier or anomaly detector, Z is the channel to watch: no DC removal, no tilt correction, no orientation model needed. Y sits in between at 32.1% dynamic content.
 
-One further detail worth noting: the Y axis mean is persistently **−2.748 m/s²**, and its p99 is −0.273 m/s² — meaning **99% of all Y samples are negative**. The Y axis almost never crosses zero. This confirms a fixed, hardware-level mounting offset, not a transient orientation effect. Any downstream classifier needs to treat Y's sign convention as an immutable constant for this device.
+One further detail worth noting: the Y axis mean is persistently **−2.748 m/s²**, and its p99 is −0.273 m/s², meaning **99% of all Y samples are negative**. The Y axis almost never crosses zero. This confirms a fixed, hardware-level mounting offset, not a transient orientation effect. Any downstream classifier needs to treat Y's sign convention as an immutable constant for this device.
 
 ---
 
 ## 2. The Sample Clock Is Jittering at 44% — This Is a Firmware Problem
 
-The median sample interval is exactly 1.2500 ms (confirming 800 Hz), but the **standard deviation is 0.5557 ms — 44.5% of the nominal interval**. This is not quantization noise. At a true 800 Hz hardware clock, interval jitter should be sub-microsecond. At 44%, the acquisition firmware is almost certainly running a **software polling loop**, not a hardware interrupt-driven timer.
+The median sample interval is exactly 1.2500 ms (confirming 800 Hz), but the **standard deviation is 0.5557 ms, 44.5% of the nominal interval**. This is not quantization noise. At a true 800 Hz hardware clock, interval jitter should be sub-microsecond. At 44%, the acquisition firmware is almost certainly running a **software polling loop**, not a hardware interrupt-driven timer.
 
-Why this matters analytically: every spectral method in this notebook — Welch PSD, STFT, the spectrogram — assumes uniform sampling. The frequency resolution claimed (0.195 Hz for Welch, 0.391 Hz for the spectrogram) is computed from sample count and nominal fs. With real jitter of 0.56 ms, each FFT window contains phase noise that broadens spectral peaks and raises the effective noise floor. The "drifting vs stable" classification of resonances is therefore less reliable than the numbers suggest — a genuinely stable resonance could appear to drift due to non-uniform time steps.
+Why this matters analytically: every spectral method in this notebook, Welch PSD, STFT, the spectrogram, assumes uniform sampling. The frequency resolution claimed (0.195 Hz for Welch, 0.391 Hz for the spectrogram) is computed from sample count and nominal fs. With real jitter of 0.56 ms, each FFT window contains phase noise that broadens spectral peaks and raises the effective noise floor. The "drifting vs stable" classification of resonances is therefore less reliable than the numbers suggest. A genuinely stable resonance could appear to drift due to non-uniform time steps.
 
-For a product shipping firmware: this is a one-line fix (hardware timer interrupt instead of polling) that would improve all downstream spectral analysis quality materially. The timestamp anomalies in Part 1 — 1,119,928 monotonicity violations and 2,385,639 duplicate timestamps (4.5% of the dataset) — are almost certainly a symptom of the same root cause: a soft clock that occasionally stalls, duplicates, or reverses under interrupt pressure.
+For a product shipping firmware: this is a one-line fix (hardware timer interrupt instead of polling) that would improve all downstream spectral analysis quality materially. The timestamp anomalies in Part 1, 1,119,928 monotonicity violations and 2,385,639 duplicate timestamps (4.5% of the dataset), are almost certainly a symptom of the same root cause: a soft clock that occasionally stalls, duplicates, or reverses under interrupt pressure.
 
 ---
 
@@ -39,9 +39,9 @@ The product implication is direct: kurtosis is cheap to compute (one pass over a
 
 All three axes have skewness within **0.013–0.016** — nearly perfectly symmetric distributions. For a system dynamics signal, this says the physical system encounters statistically equal positive and negative excursions on every axis over 18 hours, which is physically coherent: as much lateral motion in one direction as the other, as much acceleration as deceleration, similar upward and downward environmental inputs.
 
-Now compare that to the vector **magnitude** distribution, which is heavily right-skewed: mean = 10.194 m/s², median = 9.809 m/s². The mean is pulled +0.385 m/s² above the median by a long right tail of high-magnitude transient events. Yet the median is **9.809 m/s² — within 0.002 m/s² of standard g (9.807)**. The median sample, the "typical" observation in this dataset, is essentially the physical system at rest at exactly gravitational acceleration.
+Now compare that to the vector **magnitude** distribution, which is heavily right-skewed: mean = 10.194 m/s², median = 9.809 m/s². The mean is pulled +0.385 m/s² above the median by a long right tail of high-magnitude transient events. Yet the median is **9.809 m/s², within 0.002 m/s² of standard g (9.807)**. The median sample, the "typical" observation in this dataset, is essentially the physical system at rest at exactly gravitational acceleration.
 
-This is not a contradiction — it's a signal about the dataset's structure. The **typical sample is quiet, but the distribution has a heavy upper tail from impact events**. The per-axis symmetry means those impacts come from all directions equally over time. The magnitude asymmetry means when impacts happen, they add to the vector magnitude rather than cancelling across axes — which is physically expected (you can't have a "negative" impact that reduces total acceleration).
+This is not a contradiction. It's a signal about the dataset's structure. The **typical sample is quiet, but the distribution has a heavy upper tail from impact events**. The per-axis symmetry means those impacts come from all directions equally over time. The magnitude asymmetry means when impacts happen, they add to the vector magnitude rather than cancelling across axes which is physically expected (you can't have a "negative" impact that reduces total acceleration).
 
 For feature engineering: the median magnitude is a far more stable baseline than the mean. Any drift in the median over time is a meaningful signal about sensor calibration or system orientation change.
 
@@ -49,7 +49,7 @@ For feature engineering: the median magnitude is a far more stable baseline than
 
 ## 5. The Z-Axis Extremes Are Asymmetric and the Physics Explains Why
 
-Z minimum = **−22.975 m/s²**, Z maximum = **+26.954 m/s²**. With a near-zero mean (0.070 m/s²), the peak-to-peak of 49.929 m/s² is roughly symmetrically distributed around zero — but not exactly. The positive extreme is **3.98 m/s² larger** than the negative extreme in absolute terms.
+Z minimum = **−22.975 m/s²**, Z maximum = **+26.954 m/s²**. With a near-zero mean (0.070 m/s²), the peak-to-peak of 49.929 m/s² is roughly symmetrically distributed around zero but not exactly. The positive extreme is **3.98 m/s² larger** than the negative extreme in absolute terms.
 
 For a near-horizontal axis in this mounting configuration, positive Z likely corresponds to the upward direction relative to the physical system. The asymmetry means the largest recorded events were **compressions in the positive direction** (contact with a raised obstacle, mechanical damping compression) rather than extensions in the negative direction (system dropping away from a surface, damping extension). This is consistent with typical impact distributions: raised obstacles and hard surface contacts are more common and sharper than gradual downward extensions.
 
@@ -59,11 +59,11 @@ The Z peak-to-peak of 49.929 m/s² is **3.5x larger than X (13.666 m/s²)** and 
 
 ## 6. The 3g Event Happened During the Calmest Active Phase — That's the Point
 
-The maximum vector magnitude is **29.35 m/s² (2.99x g)** at **3.43 hours into the recording**. The per-hour intensity analysis for hour 3 shows only 77 p95-threshold bins — well below the expected 180 and among the lowest of any active hour. The max bin-std for hour 3 is 1.526 m/s², unremarkable.
+The maximum vector magnitude is **29.35 m/s² (2.99x g)** at **3.43 hours into the recording**. The per-hour intensity analysis for hour 3 shows only 77 p95-threshold bins, well below the expected 180 and among the lowest of any active hour. The max bin-std for hour 3 is 1.526 m/s², unremarkable.
 
 The 3g event is **discrete and isolated**: a single 32.91-second analysis bin containing an extreme excursion surrounded by hours of normal operation. This is exactly the failure mode that per-hour p95 counting cannot detect. You can be in the calmest hour of the recording and still hit 3g once.
 
-This has direct product design implications. **Any event-detection system built only on rolling standard deviation or per-minute bin statistics will miss this class of event entirely.** You need a parallel high-frequency trigger — something like "any sample exceeding N × local RMS within a short window" — running simultaneously alongside the trend analysis. The two approaches are complementary, not interchangeable. The 3g event argues for streaming processing at native 800 Hz, not just windowed aggregates.
+This has direct product design implications. **Any event-detection system built only on rolling standard deviation or per-minute bin statistics will miss this class of event entirely.** You need a parallel high-frequency trigger, something like "any sample exceeding N × local RMS within a short window", running simultaneously alongside the trend analysis. The two approaches are complementary and not interchangeable. The 3g event argues for streaming processing at native 800 Hz, not just windowed aggregates.
 
 ---
 
@@ -103,9 +103,9 @@ This means **bin-std alone can discriminate motor-on from motor-off stationary s
 
 ## 9. Gate B Is Doing All the Work in Stationary Detection — Gate A Is Nearly Redundant
 
-The two-gate stationary detector: Gate A (|mean_mag − g| < 0.30 m/s²) passes **20,528 bins**. Gate B (bin_std < 0.10 m/s²) passes **20,445 bins**. The intersection is **20,445 bins** — identical to Gate B alone. Only **83 bins pass Gate A but fail Gate B**.
+The two-gate stationary detector: Gate A (|mean_mag − g| < 0.30 m/s²) passes **20,528 bins**. Gate B (bin_std < 0.10 m/s²) passes **20,445 bins**. The intersection is **20,445 bins**, identical to Gate B alone. Only **83 bins pass Gate A but fail Gate B**.
 
-Gate A is contributing almost nothing. When the system is truly stationary, the mean magnitude is essentially always within 0.30 m/s² of g. The std threshold is the binding discriminator, not the magnitude proximity. The physical reason: a system at rest with its motor active is more likely to have a mildly elevated mean magnitude than to have elevated within-bin std — the motor vibration is structured and narrow-band, which raises std measurably before it meaningfully shifts the bin mean.
+Gate A is contributing almost nothing. When the system is truly stationary, the mean magnitude is essentially always within 0.30 m/s² of g. The std threshold is the binding discriminator, not the magnitude proximity. The physical reason: a system at rest with its motor active is more likely to have a mildly elevated mean magnitude than to have elevated within-bin std, the motor vibration is structured and narrow-band, which raises std measurably before it meaningfully shifts the bin mean.
 
 For a production implementation: **a single gate on within-bin std (< 0.10 m/s²) would give identical results** to the two-gate system, at half the compute cost. The magnitude gate adds fault tolerance in edge cases (sensor tilting mid-stop, etc.) but doesn't change the output on this dataset. This is worth knowing if this algorithm gets ported to a resource-constrained MCU.
 
@@ -113,11 +113,11 @@ For a production implementation: **a single gate on within-bin std (< 0.10 m/s²
 
 ## 10. The Vibration Intensity Distribution Is Strikingly Compressed
 
-During active operation (45,380 bins, 12.61 hours): p50 std = 1.231 m/s², p95 = 1.330 m/s², p99 = 1.377 m/s². The **entire range from the median to the 99th percentile is only 0.146 m/s²** — a 11.9% spread.
+During active operation (45,380 bins, 12.61 hours): p50 std = 1.231 m/s², p95 = 1.330 m/s², p99 = 1.377 m/s². The **entire range from the median to the 99th percentile is only 0.146 m/s²**: a 11.9% spread.
 
 This is unusually tight for 12+ hours of operation across presumably varied surface conditions. It tells you several things simultaneously: the system's mechanical damping is doing its job (absorbing variation in surface roughness before it reaches the sensor), the recording covers a homogeneous operational environment (no sudden transitions between radically different surface types), and the operation style is consistent (no sustained periods of high-speed rough-surface operation that would shift the whole distribution upward).
 
-The consequence for thresholding: **there is no natural gap in the active-bin std distribution that an absolute threshold can exploit**. A threshold at 1.0 m/s² catches everything; at 1.35 m/s² catches almost nothing. This is why the analysis correctly uses session-relative percentiles (p95, p99) rather than absolute values — the signal structure demands it, and any future model trained on this data should respect that.
+The consequence for thresholding: **there is no natural gap in the active-bin std distribution that an absolute threshold can exploit**. A threshold at 1.0 m/s² catches everything; at 1.35 m/s² catches almost nothing. This is why the analysis correctly uses session-relative percentiles (p95, p99) rather than absolute values. The signal structure demands it and any future model trained on this data should respect that.
 
 ---
 
@@ -132,19 +132,19 @@ The per-hour p95 counts trace a specific shape:
 - Hour 11: **381** (session peak, 2.12x expected)
 - Hours 12–13: rapid collapse into standby
 
-This is a double-peak with a trough at hour 8. Two plausible interpretations: the system transitioned between two distinct operational environments (smooth surface phase 1, brief stop, different conditions in phase 2), or operational speed increased progressively in both phases with the stop marking a waypoint. Either way, **hours 5–7 and 9–11 are not the same kind of rough** — hour 7's peak is driven by a high single-second max (1.550 m/s²) while hour 11's peak is driven by sustained count (381 p95 bins) with a lower max (1.460 m/s²). Discrete hard impacts vs. consistent high-vibration grinding. Different surface dynamics, different implications for system wear.
+This is a double-peak with a trough at hour 8. Two plausible interpretations: the system transitioned between two distinct operational environments (smooth surface phase 1, brief stop, different conditions in phase 2), or operational speed increased progressively in both phases with the stop marking a waypoint. Either way, **hours 5–7 and 9–11 are not the same kind of rough**, hour 7's peak is driven by a high single-second max (1.550 m/s²) while hour 11's peak is driven by sustained count (381 p95 bins) with a lower max (1.460 m/s²). Discrete hard impacts vs. consistent high-vibration grinding. Different surface dynamics, different implications for system wear.
 
-The 3g isolated impact at 3.43h occurs during the **quiet baseline phase (hours 0–4)** — reinforcing that transient discrete events and sustained vibration intensity are independent signals that must be tracked separately.
+The 3g isolated impact at 3.43h occurs during the **quiet baseline phase (hours 0–4)**, reinforcing that transient discrete events and sustained vibration intensity are independent signals that must be tracked separately.
 
 ---
 
 ## 12. The Dominant Spectral Peak May Be Interpretable as an Operational Speed
 
-The spectrogram analysis over a 30-minute clip (4.59–5.09h, within the 7.19h continuous active phase) returns 5 peaks, all operationally speed-dependent (drift std > 1.0 Hz). The strongest: **52.35 Hz at −22.49 dB with prominence 10.41 dB** — nearly 3 dB above the next strongest peak and >8 dB above the weakest. This peak dominates the system's vibrational signature.
+The spectrogram analysis over a 30-minute clip (4.59–5.09h, within the 7.19h continuous active phase) returns 5 peaks, all operationally speed-dependent (drift std > 1.0 Hz). The strongest: **52.35 Hz at −22.49 dB with prominence 10.41 dB**, nearly 3 dB above the next strongest peak and >8 dB above the weakest. This peak dominates the system's vibrational signature.
 
-More interesting is the **8.20 Hz peak** (−28.78 dB, prominence 7.82, drift std 1.04 Hz — the lowest drift in the table, nearly at the stable/drifting boundary). If this is a rotating-component frequency (such as a wheel or drive shaft), back-calculating operational speed with an assumed effective diameter of ~650 mm gives: f = v / (π × d), so v = 8.20 × π × 0.65 ≈ **16.7 m/s**. That is one plausible interpretation; without knowing the physical system type, it cannot be confirmed.
+More interesting is the **8.20 Hz peak** (−28.78 dB, prominence 7.82, drift std 1.04 Hz, the lowest drift in the table, nearly at the stable/drifting boundary). If this is a rotating-component frequency (such as a wheel or drive shaft), back-calculating operational speed with an assumed effective diameter of ~650 mm gives: f = v / (π × d), so v = 8.20 × π × 0.65 ≈ **16.7 m/s**. That is one plausible interpretation; without knowing the physical system type, it cannot be confirmed.
 
-The 52.35 Hz and 47.27 Hz pair (5 Hz apart) are worth noting as a potential near-harmonic relationship. If the fundamental were ~24 Hz, these would sit near the 2nd harmonic. The 23.83 Hz peak supports this — **23.83 Hz, 47.27 Hz, and the vicinity of 52.35 Hz could represent a 1st/2nd harmonic series from a drivetrain or surface spatial frequency**, with the 52.35 Hz peak being independently excited by a structural mode that happens to align nearby. Without additional context about the physical system this can't be confirmed, but it's a testable hypothesis on the next recording.
+The 52.35 Hz and 47.27 Hz pair (5 Hz apart) are worth noting as a potential near-harmonic relationship. If the fundamental were ~24 Hz, these would sit near the 2nd harmonic. The 23.83 Hz peak supports this, **23.83 Hz, 47.27 Hz, and the vicinity of 52.35 Hz could represent a 1st/2nd harmonic series from a drivetrain or surface spatial frequency**, with the 52.35 Hz peak being independently excited by a structural mode that happens to align nearby. Without additional context about the physical system this can't be confirmed, but it's a testable hypothesis on the next recording.
 
 ---
 
@@ -168,7 +168,7 @@ The five findings that would directly inform a product roadmap:
 
 2. **Z axis only for event detection.** Pure dynamics, no compensation required, 3.5x the amplitude range of the other axes. Everything else is redundant for impact/surface-quality scoring.
 
-3. **Use within-bin std as a motor-state proxy.** The <0.030 m/s² floor identifies motor-off states without external data bus integration — a meaningful capability for standby time and emissions inference.
+3. **Use within-bin std as a motor-state proxy.** The <0.030 m/s² floor identifies motor-off states without external data bus integration, a meaningful capability for standby time and emissions inference.
 
 4. **Run two parallel detectors.** A 1-second windowed std tracker for sustained intensity patterns (hours 7 and 11) and a sample-level threshold trigger for discrete impacts (the 3g event at 3.43h). These signals are structurally independent and one cannot substitute for the other.
 
