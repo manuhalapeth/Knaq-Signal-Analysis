@@ -1,28 +1,27 @@
 # Take Home Exercise: IOT Device Signal Analysis
 
-This was a take-home exercise. The task was to analyze a raw 3-axis accelerometer log from an IoT device and extract meaningful signal from a pretty messy dataset: 52.66 million samples, 18 hours, 800 Hz, and no preprocessing. 
+This was a take home exercise. The task was to analyze a raw 3 axis accelerometer log from an IoT device and extract meaningful signal from a pretty messy dataset: 52.66 million samples, 18 hours, 800 Hz, and no preprocessing.
 
-The write-up is in [`ManuHalapeth_Knaq_TakeHome.pdf`](./ManuHalapeth_Knaq_TakeHome.pdf). The report goes through every decision, what alternatives I considered, and what the tradeoffs were.
-
----
+The write up is in [`ManuHalapeth_Knaq_TakeHome.pdf`](./ManuHalapeth_Knaq_TakeHome.pdf). The report goes through every decision, what alternatives I considered, and what the tradeoffs were.
 
 ## Key Findings
 
 **Data Quality**
-- 6,479 corrupt rows identified and categorized (0.012% of dataset) — handled with explicit justification, not silently dropped
-- 4.5% of timestamps were duplicated or out-of-order — root cause traced to firmware using a software polling loop instead of a hardware interrupt
-- 44.5% clock jitter as a result; documented and accounted for throughout the analysis
+- 6,479 corrupt rows identified and categorized (0.012% of dataset). Handled with explicit justification, not silently dropped.
+- 4.5% of timestamps were duplicated or out of order. Root cause traced to firmware using a software polling loop instead of a hardware interrupt.
+- 44.5% clock jitter as a result, documented and accounted for throughout the analysis.
 
 **Signal Characterization**
-- Recovered sensor orientation purely from the long-run axis means — no ground truth required
-- Recovered gravity magnitude with **0.146% error**
-- Z axis carries essentially zero gravity load → it is 100% dynamics, so it can feed an event detector directly with no compensation
+- Recovered sensor orientation purely from the long run axis means. No ground truth required.
+- Recovered gravity magnitude with **0.146% error**.
+- Z axis carries essentially zero gravity load, so it is 100% dynamics and can feed an event detector directly with no compensation.
 
 **Anomaly Detection**
-- Built a two-scale detector: fine-grained 1-second Z-score (5σ threshold) + coarse 60-second rolling MAD (4σ threshold)
-- Used MAD instead of rolling std because outliers inflate std and mask adjacent anomalies — exactly the circular failure you want to avoid
-- Detected **6,019 transient events** across the full 18-hour session; top 10 characterized with individual narratives
-- Most interesting result: a **3g impact** occurred during the quietest hour of the session — any window-based intensity metric would have missed it entirely
+- Built a two scale detector: fine grained 1 second Z score (5 sigma threshold) and coarse 60 second rolling MAD (4 sigma threshold).
+- Used MAD instead of rolling std because outliers inflate std and mask adjacent anomalies. That is exactly the circular failure you want to avoid.
+- Detected **6,019 transient events** across the full 18 hour session. Top 10 characterized with individual narratives.
+- Most interesting result: a **3g impact** occurred during the quietest hour of the session. Any window based intensity metric would have missed it entirely.
+
 
 ---
 
