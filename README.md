@@ -1,6 +1,6 @@
 # Take-Home Exercise — IOV Accelerometer Signal Analysis
 
-This was a take-home exercise for a technical interview. The task was to analyze a raw 3-axis accelerometer log from an IoT device and extract meaningful signal from a pretty messy dataset.
+This was a take-home exercise. The task was to analyze a raw 3-axis accelerometer log from an IoT device and extract meaningful signal from a pretty messy dataset.
 
 The data was 800 Hz firmware output, 18 hours, 52 million samples, with no preprocessing. Before doing any analysis I had to actually trust the data, so I built a loading pipeline that auto-detects the header length, handles a pandas 2.x typing bug, and validates the sample rate against spec before touching anything else. About 4.5% of timestamps were either duplicated or out of order because the firmware was using a software polling loop instead of a hardware interrupt, which also caused 44.5% clock jitter. Those decisions all had to be documented and justified.
 
